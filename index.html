@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>广度优先搜索 (BFS) 交互式演示</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --red: #f87171;
+    --pink: #f472b6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .header {
+    text-align: center;
+    padding: 32px 20px 16px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+  .header p { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .tab.active { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .controls label { color: var(--muted); font-size: 0.85rem; }
+  .controls select, .controls input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .controls select:focus, .controls input:focus { border-color: var(--accent); }
+  .btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: #0f172a; }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #475569; }
+  .btn-reset { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+  .btn-reset:hover { background: rgba(248,113,113,0.25); }
+
+  /* Canvas area */
+  .canvas-wrap {
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    overflow: auto;
+  }
+  canvas { border-radius: 8px; }
+
+  /* Info panel */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .info-card h3 { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .info-card .value { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+  .info-card .detail { font-size: 0.85rem; color: var(--muted); margin-top: 4px; line-height: 1.6; word-break: break-all; }
+
+  /* Log */
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+  }
+  .log .step { color: var(--muted); }
+  .log .visit { color: var(--accent); }
+  .log .enqueue { color: var(--green); }
+  .log .path { color: var(--orange); font-weight: 600; }
+
+  /* Maze grid */
+  .maze-grid {
+    display: inline-grid;
+    gap: 0;
+    line-height: 0;
+  }
+  .maze-cell {
+    width: 24px;
+    height: 24px;
+    transition: background 0.15s;
+  }
+  .maze-wall { background: #334155; }
+  .maze-path { background: #1e293b; }
+  .maze-start { background: var(--green); border-radius: 4px; }
+  .maze-end { background: var(--red); border-radius: 4px; }
+  .maze-visited { background: rgba(56,189,248,0.25); }
+  .maze-current { background: var(--accent); border-radius: 50%; transform: scale(0.85); }
+  .maze-solution { background: var(--orange); border-radius: 4px; }
+
+  /* Speed slider */
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--muted); }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; }
+
+  /* Concept section */
+  .concept {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .concept h2 { font-size: 1.2rem; margin-bottom: 12px; color: var(--accent); }
+  .concept p { color: var(--muted); line-height: 1.8; font-size: 0.9rem; }
+  .concept code {
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--accent2);
+  }
+  .concept pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+  .complexity-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 0.85rem;
+  }
+  .complexity-table th, .complexity-table td {
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    text-align: left;
+  }
+  .complexity-table th { background: var(--bg); color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>广度优先搜索 (BFS) 交互式演示</h1>
+  <p>直观理解 BFS 算法的遍历过程 — 图遍历 / 最短路径 / 迷宫求解</p>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('graph')">图遍历</button>
+    <button class="tab" onclick="switchTab('shortest')">最短路径</button>
+    <button class="tab" onclick="switchTab('maze')">迷宫求解</button>
+  </div>
+
+  <!-- ═══════ 图遍历面板 ═══════ -->
+  <div id="panel-graph" class="panel active">
+    <div class="controls">
+      <label>起始节点</label>
+      <select id="graphStartNode"></select>
+      <label>速度</label>
+      <input type="range" id="graphSpeed" min="50" max="1500" value="600" step="50">
+      <button class="btn btn-primary" id="graphStartBtn" onclick="startGraphBFS()">开始遍历</button>
+      <button class="btn btn-secondary" id="graphStepBtn" onclick="stepGraphBFS()">单步执行</button>
+      <button class="btn btn-reset" onclick="resetGraph()">重置</button>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="graphCanvas" width="800" height="450"></canvas>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>遍历顺序</h3>
+        <div class="detail" id="graphOrder">—</div>
+      </div>
+      <div class="info-card">
+        <h3>当前队列</h3>
+        <div class="detail" id="graphQueue">[ ]</div>
+      </div>
+      <div class="info-card">
+        <h3>层级信息</h3>
+        <div class="detail" id="graphLevels">—</div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#94a3b8"></div>未访问</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div>已访问</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div>当前节点</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div>在队列中</div>
+    </div>
+    <div class="log" id="graphLog"></div>
+  </div>
+
+  <!-- ═══════ 最短路径面板 ═══════ -->
+  <div id="panel-shortest" class="panel">
+    <div class="controls">
+      <label>起点</label>
+      <select id="shortStartNode"></select>
+      <label>终点</label>
+      <select id="shortEndNode"></select>
+      <label>速度</label>
+      <input type="range" id="shortSpeed" min="50" max="1500" value="600" step="50">
+      <button class="btn btn-primary" id="shortStartBtn" onclick="startShortestBFS()">开始搜索</button>
+      <button class="btn btn-reset" onclick="resetShortest()">重置</button>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="shortCanvas" width="800" height="450"></canvas>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>搜索结果</h3>
+        <div class="detail" id="shortResult">—</div>
+      </div>
+      <div class="info-card">
+        <h3>当前队列</h3>
+        <div class="detail" id="shortQueue">[ ]</div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#94a3b8"></div>未访问</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(56,189,248,0.4)"></div>已探索</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div>当前节点</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div>最短路径</div>
+    </div>
+    <div class="log" id="shortLog"></div>
+  </div>
+
+  <!-- ═══════ 迷宫面板 ═══════ -->
+  <div id="panel-maze" class="panel">
+    <div class="controls">
+      <label>迷宫大小</label>
+      <select id="mazeSize">
+        <option value="11">小 (11x11)</option>
+        <option value="21" selected>中 (21x21)</option>
+        <option value="31">大 (31x31)</option>
+      </select>
+      <label>速度</label>
+      <input type="range" id="mazeSpeed" min="10" max="500" value="80" step="10">
+      <button class="btn btn-secondary" onclick="generateMaze()">新迷宫</button>
+      <button class="btn btn-primary" id="mazeStartBtn" onclick="startMazeBFS()">求解</button>
+      <button class="btn btn-reset" onclick="resetMaze()">重置</button>
+    </div>
+    <div class="canvas-wrap" id="mazeWrap"></div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>搜索状态</h3>
+        <div class="value" id="mazeStatus">就绪</div>
+      </div>
+      <div class="info-card">
+        <h3>已探索节点</h3>
+        <div class="value" id="mazeExplored">0</div>
+      </div>
+      <div class="info-card">
+        <h3>最短路径长度</h3>
+        <div class="value" id="mazePathLen">—</div>
+      </div>
+    </div>
+    <div class="log" id="mazeLog"></div>
+  </div>
+
+  <!-- ═══════ 算法说明 ═══════ -->
+  <div class="concept">
+    <h2>算法原理</h2>
+    <p>
+      广度优先搜索 (Breadth-First Search) 是一种经典的图遍历算法。它从起始节点出发，
+      先访问所有距离为 1 的邻居节点，再访问距离为 2 的节点，依此类推，逐层向外扩展。
+      BFS 使用 <code>队列 (Queue)</code> 数据结构来保证"先进先出"的访问顺序。
+    </p>
+    <pre>def BFS(graph, start):
+    queue = [start]
+    visited = {start}
+
+    while queue:
+        node = queue.pop(0)        # 出队
+        for neighbor in graph[node]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)  # 入队</pre>
+    <table class="complexity-table">
+      <tr><th>指标</th><th>复杂度</th><th>说明</th></tr>
+      <tr><td>时间复杂度</td><td>O(V + E)</td><td>V=顶点数, E=边数，每个顶点和边最多访问一次</td></tr>
+      <tr><td>空间复杂度</td><td>O(V)</td><td>队列和 visited 集合最坏情况存储所有顶点</td></tr>
+      <tr><td>最短路径</td><td>保证</td><td>在无权图中，BFS 找到的一定是最短路径</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// 通用工具
+// ═══════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const panels = ['graph', 'shortest', 'maze'];
+    t.classList.toggle('active', panels[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// 示例图定义
+// ═══════════════════════════════════════════
+const GRAPH_NODES = [
+  { id: 'A', x: 400, y: 60 },
+  { id: 'B', x: 250, y: 160 },
+  { id: 'C', x: 550, y: 160 },
+  { id: 'D', x: 130, y: 280 },
+  { id: 'E', x: 330, y: 280 },
+  { id: 'F', x: 500, y: 280 },
+  { id: 'G', x: 670, y: 280 },
+  { id: 'H', x: 200, y: 390 },
+  { id: 'I', x: 400, y: 390 },
+  { id: 'J', x: 600, y: 390 },
+];
+
+const GRAPH_EDGES = [
+  ['A','B'],['A','C'],['B','D'],['B','E'],['C','E'],['C','F'],
+  ['D','H'],['E','F'],['E','I'],['F','G'],['F','J'],['G','J'],
+  ['H','I'],['I','J'],
+];
+
+const adjacency = {};
+GRAPH_NODES.forEach(n => adjacency[n.id] = []);
+GRAPH_EDGES.forEach(([u, v]) => {
+  adjacency[u].push(v);
+  adjacency[v].push(u);
+});
+
+// ═══════════════════════════════════════════
+// 图遍历面板
+// ═══════════════════════════════════════════
+let graphState = { running: false, timer: null, visited: new Set(), queue: [], order: [], levels: {}, current: null, inQueue: new Set() };
+
+function getNodePos(id) {
+  const n = GRAPH_NODES.find(n => n.id === id);
+  return n ? { x: n.x, y: n.y } : { x: 0, y: 0 };
+}
+
+function populateGraphSelects() {
+  const sel = document.getElementById('graphStartNode');
+  GRAPH_NODES.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n.id; opt.textContent = `节点 ${n.id}`;
+    sel.appendChild(opt);
+  });
+  const sel2 = document.getElementById('shortStartNode');
+  const sel3 = document.getElementById('shortEndNode');
+  GRAPH_NODES.forEach((n, i) => {
+    const o2 = document.createElement('option');
+    o2.value = n.id; o2.textContent = n.id;
+    sel2.appendChild(o2);
+    const o3 = document.createElement('option');
+    o3.value = n.id; o3.textContent = n.id;
+    sel3.appendChild(o3);
+  });
+  sel3.value = 'J';
+}
+
+function drawGraph(canvasId, state, highlightPath) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw edges
+  GRAPH_EDGES.forEach(([u, v]) => {
+    const a = getNodePos(u), b = getNodePos(v);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+
+    const isPath = highlightPath && highlightPath.has(u + '-' + v) || highlightPath && highlightPath.has(v + '-' + u);
+    if (isPath) {
+      ctx.strokeStyle = '#fb923c';
+      ctx.lineWidth = 4;
+    } else if (state.visited.has(u) && state.visited.has(v)) {
+      ctx.strokeStyle = 'rgba(56,189,248,0.25)';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+      ctx.lineWidth = 1.5;
+    }
+    ctx.stroke();
+  });
+
+  // Draw nodes
+  GRAPH_NODES.forEach(n => {
+    const isCurrent = state.current === n.id;
+    const isVisited = state.visited.has(n.id);
+    const isInQueue = state.inQueue.has(n.id);
+    const isOnPath = highlightPath && highlightPath.nodes && highlightPath.nodes.has(n.id);
+
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, isCurrent ? 26 : 22, 0, Math.PI * 2);
+
+    if (isOnPath) {
+      ctx.fillStyle = '#fb923c';
+    } else if (isCurrent) {
+      ctx.fillStyle = '#facc15';
+    } else if (isInQueue) {
+      ctx.fillStyle = '#4ade80';
+    } else if (isVisited) {
+      ctx.fillStyle = '#38bdf8';
+    } else {
+      ctx.fillStyle = '#475569';
+    }
+    ctx.fill();
+
+    if (isCurrent) {
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // Level ring
+    if (isVisited && state.levels[n.id] !== undefined) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 30, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(56,189,248,0.15)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = isVisited || isOnPath ? '#0f172a' : '#e2e8f0';
+    ctx.font = 'bold 15px "Segoe UI", system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n.id, n.x, n.y);
+
+    // Level label
+    if (isVisited && state.levels[n.id] !== undefined) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px "Segoe UI", system-ui';
+      ctx.fillText('L' + state.levels[n.id], n.x, n.y + 38);
+    }
+  });
+}
+
+function updateGraphInfo() {
+  document.getElementById('graphOrder').textContent = graphState.order.length ? graphState.order.join(' → ') : '—';
+  document.getElementById('graphQueue').textContent = '[ ' + graphState.queue.join(', ') + ' ]';
+  const lvlText = Object.entries(graphState.levels).sort((a,b) => a[0]-b[0]).map(([l, ns]) => `第${l}层: [${ns.join(', ')}]`).join('\n');
+  document.getElementById('graphLevels').textContent = lvlText || '—';
+}
+
+function addGraphLog(msg, cls) {
+  const log = document.getElementById('graphLog');
+  log.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function resetGraph() {
+  clearTimeout(graphState.timer);
+  graphState = { running: false, timer: null, visited: new Set(), queue: [], order: [], levels: {}, current: null, inQueue: new Set() };
+  document.getElementById('graphLog').innerHTML = '';
+  document.getElementById('graphStartBtn').disabled = false;
+  document.getElementById('graphStepBtn').disabled = false;
+  updateGraphInfo();
+  drawGraph('graphCanvas', graphState);
+}
+
+function graphBFSStep() {
+  if (graphState.queue.length === 0) {
+    graphState.running = false;
+    graphState.current = null;
+    document.getElementById('graphStartBtn').disabled = false;
+    document.getElementById('graphStepBtn').disabled = false;
+    addGraphLog('✓ 遍历完成！共访问 ' + graphState.order.length + ' 个节点', 'visit');
+    drawGraph('graphCanvas', graphState);
+    updateGraphInfo();
+    return false;
+  }
+
+  const node = graphState.queue.shift();
+  graphState.inQueue.delete(node);
+  graphState.current = node;
+  graphState.visited.add(node);
+  graphState.order.push(node);
+  const level = graphState.levels[node];
+
+  addGraphLog(`访问节点 ${node} (第${level}层)`, 'visit');
+
+  const neighbors = adjacency[node].sort();
+  const newNodes = [];
+  neighbors.forEach(nb => {
+    if (!graphState.visited.has(nb) && !graphState.inQueue.has(nb)) {
+      graphState.inQueue.add(nb);
+      graphState.queue.push(nb);
+      graphState.levels[nb] = level + 1;
+      newNodes.push(nb);
+    }
+  });
+  if (newNodes.length) {
+    addGraphLog(`  → 将 ${newNodes.join(', ')} 入队`, 'enqueue');
+  }
+
+  drawGraph('graphCanvas', graphState);
+  updateGraphInfo();
+  return true;
+}
+
+function stepGraphBFS() {
+  if (!graphState.running && graphState.queue.length === 0) {
+    // Initialize
+    const start = document.getElementById('graphStartNode').value;
+    graphState.queue.push(start);
+    graphState.inQueue.add(start);
+    graphState.levels[start] = 0;
+    graphState.running = true;
+    addGraphLog(`初始化: 起始节点 ${start} 入队`, 'step');
+    updateGraphInfo();
+    drawGraph('graphCanvas', graphState);
+    return;
+  }
+  graphBFSStep();
+}
+
+function startGraphBFS() {
+  if (graphState.running) return;
+  document.getElementById('graphStartBtn').disabled = true;
+  document.getElementById('graphStepBtn').disabled = true;
+
+  const start = document.getElementById('graphStartNode').value;
+  graphState.queue.push(start);
+  graphState.inQueue.add(start);
+  graphState.levels[start] = 0;
+  graphState.running = true;
+  addGraphLog(`初始化: 起始节点 ${start} 入队`, 'step');
+  updateGraphInfo();
+  drawGraph('graphCanvas', graphState);
+
+  function loop() {
+    if (!graphState.running) return;
+    const hasMore = graphBFSStep();
+    if (hasMore) {
+      const speed = parseInt(document.getElementById('graphSpeed').value);
+      graphState.timer = setTimeout(loop, speed);
+    }
+  }
+  graphState.timer = setTimeout(loop, 300);
+}
+
+// ═══════════════════════════════════════════
+// 最短路径面板
+// ═══════════════════════════════════════════
+let shortState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, inQueue: new Set(), found: false, path: [], pathSet: new Set(), pathEdges: new Set() };
+
+function resetShortest() {
+  clearTimeout(shortState.timer);
+  shortState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, inQueue: new Set(), found: false, path: [], pathSet: new Set(), pathEdges: new Set() };
+  document.getElementById('shortLog').innerHTML = '';
+  document.getElementById('shortStartBtn').disabled = false;
+  document.getElementById('shortResult').textContent = '—';
+  document.getElementById('shortQueue').textContent = '[ ]';
+  drawGraph('shortCanvas', shortState);
+}
+
+function addShortLog(msg, cls) {
+  const log = document.getElementById('shortLog');
+  log.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function shortBFSStep() {
+  if (shortState.queue.length === 0 && !shortState.found) {
+    shortState.running = false;
+    shortState.current = null;
+    document.getElementById('shortStartBtn').disabled = false;
+    addShortLog('✗ 无法到达目标节点！', 'step');
+    drawGraph('shortCanvas', shortState, { nodes: shortState.pathSet, edges: shortState.pathEdges });
+    return false;
+  }
+
+  if (shortState.found) {
+    return false;
+  }
+
+  const node = shortState.queue.shift();
+  shortState.inQueue.delete(node);
+  shortState.current = node;
+  shortState.visited.add(node);
+  addShortLog(`探索节点 ${node}`, 'visit');
+
+  const end = document.getElementById('shortEndNode').value;
+  if (node === end) {
+    shortState.found = true;
+    shortState.running = false;
+    document.getElementById('shortStartBtn').disabled = false;
+    // Reconstruct path
+    let cur = end;
+    while (cur !== null) {
+      shortState.path.unshift(cur);
+      shortState.pathSet.add(cur);
+      const p = shortState.parent[cur];
+      if (p !== null && p !== undefined) {
+        shortState.pathEdges.add(p + '-' + cur);
+        shortState.pathEdges.add(cur + '-' + p);
+      }
+      cur = p;
+    }
+    document.getElementById('shortResult').innerHTML = `<span class="path">${shortState.path.join(' → ')}</span><br>路径长度: ${shortState.path.length - 1}`;
+    addShortLog(`✓ 找到最短路径: ${shortState.path.join(' → ')} (长度 ${shortState.path.length - 1})`, 'path');
+    shortState.current = null;
+    drawGraph('shortCanvas', shortState, { nodes: shortState.pathSet, edges: shortState.pathEdges });
+    document.getElementById('shortQueue').textContent = '[ ]';
+    return false;
+  }
+
+  const neighbors = adjacency[node].sort();
+  neighbors.forEach(nb => {
+    if (!shortState.visited.has(nb) && !shortState.inQueue.has(nb)) {
+      shortState.inQueue.add(nb);
+      shortState.queue.push(nb);
+      shortState.parent[nb] = node;
+      addShortLog(`  → ${nb} 入队 (父: ${node})`, 'enqueue');
+    }
+  });
+
+  document.getElementById('shortQueue').textContent = '[ ' + shortState.queue.join(', ') + ' ]';
+  drawGraph('shortCanvas', shortState, { nodes: shortState.pathSet, edges: shortState.pathEdges });
+  return true;
+}
+
+function startShortestBFS() {
+  if (shortState.running) return;
+  document.getElementById('shortStartBtn').disabled = true;
+
+  const start = document.getElementById('shortStartNode').value;
+  shortState.queue.push(start);
+  shortState.inQueue.add(start);
+  shortState.parent[start] = null;
+  shortState.running = true;
+  addShortLog(`初始化: 从 ${start} 出发，目标 ${document.getElementById('shortEndNode').value}`, 'step');
+  document.getElementById('shortQueue').textContent = '[ ' + start + ' ]';
+  drawGraph('shortCanvas', shortState);
+
+  function loop() {
+    if (!shortState.running) return;
+    const hasMore = shortBFSStep();
+    if (hasMore) {
+      const speed = parseInt(document.getElementById('shortSpeed').value);
+      shortState.timer = setTimeout(loop, speed);
+    }
+  }
+  shortState.timer = setTimeout(loop, 300);
+}
+
+// ═══════════════════════════════════════════
+// 迷宫面板
+// ═══════════════════════════════════════════
+let mazeGrid = [];
+let mazeW = 21, mazeH = 21;
+let mazeState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, found: false, solution: [], explored: 0 };
+
+function generateMaze() {
+  clearTimeout(mazeState.timer);
+  mazeW = mazeH = parseInt(document.getElementById('mazeSize').value);
+  mazeGrid = Array.from({ length: mazeH }, () => Array(mazeW).fill(1));
+  document.getElementById('mazeLog').innerHTML = '';
+  document.getElementById('mazeStatus').textContent = '就绪';
+  document.getElementById('mazeExplored').textContent = '0';
+  document.getElementById('mazePathLen').textContent = '—';
+  document.getElementById('mazeStartBtn').disabled = false;
+
+  // Recursive backtracking
+  function carve(y, x) {
+    mazeGrid[y][x] = 0;
+    const dirs = [[0,2],[0,-2],[2,0],[-2,0]].sort(() => Math.random() - 0.5);
+    for (const [dy, dx] of dirs) {
+      const ny = y + dy, nx = x + dx;
+      if (ny > 0 && ny < mazeH - 1 && nx > 0 && nx < mazeW - 1 && mazeGrid[ny][nx] === 1) {
+        mazeGrid[y + dy/2][x + dx/2] = 0;
+        carve(ny, nx);
+      }
+    }
+  }
+  carve(1, 1);
+  mazeGrid[1][0] = 0;
+  mazeGrid[mazeH - 2][mazeW - 1] = 0;
+  mazeState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, found: false, solution: [], explored: 0 };
+  renderMaze();
+}
+
+function renderMaze() {
+  const wrap = document.getElementById('mazeWrap');
+  const cellSize = mazeW <= 11 ? 36 : mazeW <= 21 ? 24 : 18;
+  wrap.innerHTML = `<div class="maze-grid" style="grid-template-columns: repeat(${mazeW}, ${cellSize}px)"></div>`;
+  const grid = wrap.firstChild;
+
+  const start = '1,0';
+  const end = `${mazeH-2},${mazeW-1}`;
+  const solutionSet = new Set(mazeState.solution.map(([y,x]) => `${y},${x}`));
+
+  for (let y = 0; y < mazeH; y++) {
+    for (let x = 0; x < mazeW; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'maze-cell';
+      const key = `${y},${x}`;
+      if (key === start) cell.classList.add('maze-start');
+      else if (key === end) cell.classList.add('maze-end');
+      else if (mazeGrid[y][x] === 1) cell.classList.add('maze-wall');
+      else if (mazeState.current && mazeState.current[0] === y && mazeState.current[1] === x) cell.classList.add('maze-current');
+      else if (solutionSet.has(key)) cell.classList.add('maze-solution');
+      else if (mazeState.visited.has(key)) cell.classList.add('maze-visited');
+      else cell.classList.add('maze-path');
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function resetMaze() {
+  clearTimeout(mazeState.timer);
+  mazeState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, found: false, solution: [], explored: 0 };
+  document.getElementById('mazeLog').innerHTML = '';
+  document.getElementById('mazeStatus').textContent = '就绪';
+  document.getElementById('mazeExplored').textContent = '0';
+  document.getElementById('mazePathLen').textContent = '—';
+  document.getElementById('mazeStartBtn').disabled = false;
+  renderMaze();
+}
+
+function addMazeLog(msg, cls) {
+  const log = document.getElementById('mazeLog');
+  log.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function startMazeBFS() {
+  if (mazeState.running) return;
+  if (mazeGrid.length === 0) { generateMaze(); return; }
+
+  document.getElementById('mazeStartBtn').disabled = true;
+  mazeState.running = true;
+  const startKey = '1,0';
+  const endKey = `${mazeH-2},${mazeW-1}`;
+  mazeState.queue.push([1, 0]);
+  mazeState.visited.add(startKey);
+  mazeState.parent[startKey] = null;
+  document.getElementById('mazeStatus').textContent = '搜索中...';
+
+  function step() {
+    if (!mazeState.running || mazeState.queue.length === 0) {
+      if (!mazeState.found) {
+        mazeState.running = false;
+        document.getElementById('mazeStatus').textContent = '无解';
+        document.getElementById('mazeStartBtn').disabled = false;
+        addMazeLog('✗ 迷宫无解！', 'step');
+      }
+      return;
+    }
+
+    const [cy, cx] = mazeState.queue.shift();
+    mazeState.current = [cy, cx];
+    mazeState.explored++;
+    document.getElementById('mazeExplored').textContent = mazeState.explored;
+
+    const key = `${cy},${cx}`;
+    if (key === endKey) {
+      mazeState.found = true;
+      mazeState.running = false;
+      document.getElementById('mazeStartBtn').disabled = false;
+      // Reconstruct
+      let cur = endKey;
+      mazeState.solution = [];
+      while (cur !== null) {
+        const [yy, xx] = cur.split(',').map(Number);
+        mazeState.solution.unshift([yy, xx]);
+        cur = mazeState.parent[cur];
+      }
+      mazeState.current = null;
+      document.getElementById('mazeStatus').textContent = '已找到！';
+      document.getElementById('mazePathLen').textContent = (mazeState.solution.length - 1) + ' 步';
+      addMazeLog(`✓ 找到最短路径，长度 ${mazeState.solution.length - 1} 步`, 'path');
+      renderMaze();
+      return;
+    }
+
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+    for (const [dy, dx] of dirs) {
+      const ny = cy + dy, nx = cx + dx;
+      const nk = `${ny},${nx}`;
+      if (ny >= 0 && ny < mazeH && nx >= 0 && nx < mazeW && mazeGrid[ny][nx] === 0 && !mazeState.visited.has(nk)) {
+        mazeState.visited.add(nk);
+        mazeState.parent[nk] = key;
+        mazeState.queue.push([ny, nx]);
+      }
+    }
+
+    renderMaze();
+    const speed = parseInt(document.getElementById('mazeSpeed').value);
+    mazeState.timer = setTimeout(step, speed);
+  }
+
+  step();
+}
+
+// ═══════════════════════════════════════════
+// 初始化
+// ═══════════════════════════════════════════
+populateGraphSelects();
+drawGraph('graphCanvas', graphState);
+drawGraph('shortCanvas', shortState);
+generateMaze();
+</script>
+</body>
+</html>
