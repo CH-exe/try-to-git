@@ -139,6 +139,47 @@ def demo_tree_traversal() -> None:
         print(f"  第 {level} 层: {nodes}")
 
 
+def demo_word_ladder() -> None:
+    """演示：单词接龙 — 用 BFS 找到最短单词转换路径"""
+    print("\n" + "=" * 60)
+    print("场景 5：单词接龙 — 最短单词转换路径")
+    print("=" * 60)
+
+    word_list = [
+        "cat", "bat", "hat", "hot", "dot", "dog", "log", "lot",
+        "rat", "mat", "map", "cap", "car", "bar", "baz", "raz",
+        "red", "bed", "bet", "bit", "sit", "set", "net", "hen",
+        "pen", "pin", "bin", "big", "pig", "dig", "fig", "fin",
+        "tin", "win", "wing", "ring", "king", "sing", "song",
+    ]
+
+    def get_neighbors(word: str) -> list[str]:
+        neighbors = []
+        for w in word_list:
+            if len(w) == len(word):
+                diff = sum(c1 != c2 for c1, c2 in zip(word, w))
+                if diff == 1:
+                    neighbors.append(w)
+        return neighbors
+
+    g = Graph(directed=False)
+    for word in word_list:
+        g.add_vertex(word)
+        for neighbor in get_neighbors(word):
+            g.add_edge(word, neighbor)
+
+    print(f"\n词库共 {len(g.vertices())} 个单词，{len(g.edges())} 条连接关系\n")
+
+    pairs = [("cat", "dog"), ("bat", "pig"), ("red", "king")]
+    for start, end in pairs:
+        path = bfs_shortest_path(g, start, end)
+        if path:
+            dist = len(path) - 1
+            print(f"  {start} → {end}: {' → '.join(path)} (距离: {dist})")
+        else:
+            print(f"  {start} → {end}: 无法转换")
+
+
 def run_all_demos() -> None:
     """运行所有演示场景"""
     print("\n" + "╔" + "═" * 58 + "╗")
@@ -149,6 +190,7 @@ def run_all_demos() -> None:
     demo_metro()
     demo_maze()
     demo_tree_traversal()
+    demo_word_ladder()
 
     print("\n" + "=" * 60)
     print("所有演示运行完毕！")

@@ -264,6 +264,7 @@
     <button class="tab active" onclick="switchTab('graph')">图遍历</button>
     <button class="tab" onclick="switchTab('shortest')">最短路径</button>
     <button class="tab" onclick="switchTab('maze')">迷宫求解</button>
+    <button class="tab" onclick="switchTab('wordladder')">单词接龙</button>
   </div>
 
   <!-- ═══════ 图遍历面板 ═══════ -->
@@ -368,6 +369,44 @@
       </div>
     </div>
     <div class="log" id="mazeLog"></div>
+  </div>
+
+  <!-- ═══════ 单词接龙面板 ═══════ -->
+  <div id="panel-wordladder" class="panel">
+    <div class="controls">
+      <label>起始单词</label>
+      <select id="wlStart"></select>
+      <label>目标单词</label>
+      <select id="wlEnd"></select>
+      <label>速度</label>
+      <input type="range" id="wlSpeed" min="100" max="1500" value="500" step="50">
+      <button class="btn btn-primary" id="wlStartBtn" onclick="startWordLadder()">开始转换</button>
+      <button class="btn btn-reset" onclick="resetWordLadder()">重置</button>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="wlCanvas" width="800" height="450"></canvas>
+    </div>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>搜索结果</h3>
+        <div class="detail" id="wlResult">—</div>
+      </div>
+      <div class="info-card">
+        <h3>当前队列</h3>
+        <div class="detail" id="wlQueue">[ ]</div>
+      </div>
+      <div class="info-card">
+        <h3>已探索单词</h3>
+        <div class="value" id="wlExplored">0</div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#475569"></div>未探索</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(56,189,248,0.3)"></div>已探索</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div>当前单词</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div>最短路径</div>
+    </div>
+    <div class="log" id="wlLog"></div>
   </div>
 
   <!-- ═══════ 算法说明 ═══════ -->
@@ -907,12 +946,255 @@ function startMazeBFS() {
 }
 
 // ═══════════════════════════════════════════
+// 单词接龙面板
+// ═══════════════════════════════════════════
+const WL_WORDS = [
+  "cat", "bat", "hat", "hot", "dot", "dog", "log", "lot",
+  "rat", "mat", "map", "cap", "car", "bar", "baz", "raz",
+  "red", "bed", "bet", "bit", "sit", "set", "net", "hen",
+  "pen", "pin", "bin", "big", "pig", "dig", "fig", "fin",
+  "tin", "win", "ring", "king", "sing", "song",
+];
+
+function wlGetNeighbors(word) {
+  return WL_WORDS.filter(w => {
+    if (w.length !== word.length) return false;
+    let diff = 0;
+    for (let i = 0; i < word.length; i++) {
+      if (w[i] !== word[i]) diff++;
+      if (diff > 1) return false;
+    }
+    return diff === 1;
+  });
+}
+
+const wlAdjacency = {};
+WL_WORDS.forEach(w => wlAdjacency[w] = wlGetNeighbors(w));
+
+let wlState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, inQueue: new Set(), found: false, path: [], pathSet: new Set(), explored: 0 };
+
+function populateWordLadderSelects() {
+  const sel1 = document.getElementById('wlStart');
+  const sel2 = document.getElementById('wlEnd');
+  WL_WORDS.forEach(w => {
+    const o1 = document.createElement('option');
+    o1.value = w; o1.textContent = w;
+    sel1.appendChild(o1);
+    const o2 = document.createElement('option');
+    o2.value = w; o2.textContent = w;
+    sel2.appendChild(o2);
+  });
+  sel1.value = 'cat';
+  sel2.value = 'dog';
+}
+
+function drawWordLadder() {
+  const canvas = document.getElementById('wlCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const radius = 160;
+
+  const wordsByLen = {};
+  WL_WORDS.forEach(w => {
+    if (!wordsByLen[w.length]) wordsByLen[w.length] = [];
+    wordsByLen[w.length].push(w);
+  });
+
+  const wordPositions = {};
+  let totalIdx = 0;
+  const total = WL_WORDS.length;
+
+  WL_WORDS.forEach(w => {
+    const angle = (totalIdx / total) * Math.PI * 2 - Math.PI / 2;
+    const x = centerX + Math.cos(angle) * radius;
+    const y = centerY + Math.sin(angle) * radius;
+    wordPositions[w] = { x, y };
+    totalIdx++;
+  });
+
+  WL_WORDS.forEach(w => {
+    const neighbors = wlAdjacency[w];
+    neighbors.forEach(n => {
+      if (WL_WORDS.indexOf(w) < WL_WORDS.indexOf(n)) {
+        const p1 = wordPositions[w];
+        const p2 = wordPositions[n];
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        const isPath = wlState.pathSet.has(w) && wlState.pathSet.has(n);
+        if (isPath) {
+          ctx.strokeStyle = '#fb923c';
+          ctx.lineWidth = 4;
+        } else if (wlState.visited.has(w) && wlState.visited.has(n)) {
+          ctx.strokeStyle = 'rgba(56,189,248,0.2)';
+          ctx.lineWidth = 1.5;
+        } else {
+          ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+          ctx.lineWidth = 1;
+        }
+        ctx.stroke();
+      }
+    });
+  });
+
+  WL_WORDS.forEach(w => {
+    const pos = wordPositions[w];
+    const isCurrent = wlState.current === w;
+    const isVisited = wlState.visited.has(w);
+    const isOnPath = wlState.pathSet.has(w);
+    const isStart = w === document.getElementById('wlStart').value;
+    const isEnd = w === document.getElementById('wlEnd').value;
+
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, isCurrent ? 28 : 24, 0, Math.PI * 2);
+
+    if (isOnPath) {
+      ctx.fillStyle = '#fb923c';
+    } else if (isCurrent) {
+      ctx.fillStyle = '#facc15';
+    } else if (isStart) {
+      ctx.fillStyle = '#4ade80';
+    } else if (isEnd) {
+      ctx.fillStyle = '#f87171';
+    } else if (isVisited) {
+      ctx.fillStyle = 'rgba(56,189,248,0.4)';
+    } else {
+      ctx.fillStyle = '#475569';
+    }
+    ctx.fill();
+
+    if (isCurrent) {
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = isVisited || isOnPath || isStart || isEnd ? '#0f172a' : '#e2e8f0';
+    ctx.font = 'bold 14px "Segoe UI", system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(w, pos.x, pos.y);
+  });
+}
+
+function addWLLog(msg, cls) {
+  const log = document.getElementById('wlLog');
+  log.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function resetWordLadder() {
+  clearTimeout(wlState.timer);
+  wlState = { running: false, timer: null, visited: new Set(), queue: [], parent: {}, current: null, inQueue: new Set(), found: false, path: [], pathSet: new Set(), explored: 0 };
+  document.getElementById('wlLog').innerHTML = '';
+  document.getElementById('wlStartBtn').disabled = false;
+  document.getElementById('wlResult').textContent = '—';
+  document.getElementById('wlQueue').textContent = '[ ]';
+  document.getElementById('wlExplored').textContent = '0';
+  drawWordLadder();
+}
+
+function wlStep() {
+  if (wlState.queue.length === 0 && !wlState.found) {
+    wlState.running = false;
+    wlState.current = null;
+    document.getElementById('wlStartBtn').disabled = false;
+    addWLLog('✗ 无法转换！', 'step');
+    drawWordLadder();
+    return false;
+  }
+
+  if (wlState.found) return false;
+
+  const word = wlState.queue.shift();
+  wlState.inQueue.delete(word);
+  wlState.current = word;
+  wlState.visited.add(word);
+  wlState.explored++;
+  document.getElementById('wlExplored').textContent = wlState.explored;
+
+  addWLLog(`探索: ${word}`, 'visit');
+
+  const end = document.getElementById('wlEnd').value;
+  if (word === end) {
+    wlState.found = true;
+    wlState.running = false;
+    document.getElementById('wlStartBtn').disabled = false;
+
+    let cur = end;
+    wlState.path = [];
+    while (cur !== null) {
+      wlState.path.unshift(cur);
+      wlState.pathSet.add(cur);
+      cur = wlState.parent[cur];
+    }
+    document.getElementById('wlResult').innerHTML = `<span class="path">${wlState.path.join(' → ')}</span><br>转换次数: ${wlState.path.length - 1}`;
+    addWLLog(`✓ 找到最短路径: ${wlState.path.join(' → ')} (${wlState.path.length - 1}次转换)`, 'path');
+    wlState.current = null;
+    drawWordLadder();
+    document.getElementById('wlQueue').textContent = '[ ]';
+    return false;
+  }
+
+  const neighbors = wlAdjacency[word].sort();
+  neighbors.forEach(nb => {
+    if (!wlState.visited.has(nb) && !wlState.inQueue.has(nb)) {
+      wlState.inQueue.add(nb);
+      wlState.queue.push(nb);
+      wlState.parent[nb] = word;
+      addWLLog(`  → ${nb} 入队 (来自 ${word})`, 'enqueue');
+    }
+  });
+
+  document.getElementById('wlQueue').textContent = '[ ' + wlState.queue.join(', ') + ' ]';
+  drawWordLadder();
+  return true;
+}
+
+function startWordLadder() {
+  if (wlState.running) return;
+  document.getElementById('wlStartBtn').disabled = true;
+
+  const start = document.getElementById('wlStart').value;
+  const end = document.getElementById('wlEnd').value;
+
+  if (start.length !== end.length) {
+    addWLLog('✗ 起始单词和目标单词长度必须相同！', 'step');
+    document.getElementById('wlStartBtn').disabled = false;
+    return;
+  }
+
+  wlState.queue.push(start);
+  wlState.inQueue.add(start);
+  wlState.parent[start] = null;
+  wlState.running = true;
+  addWLLog(`初始化: 从 "${start}" 到 "${end}"`, 'step');
+  document.getElementById('wlQueue').textContent = '[ ' + start + ' ]';
+  drawWordLadder();
+
+  function loop() {
+    if (!wlState.running) return;
+    const hasMore = wlStep();
+    if (hasMore) {
+      const speed = parseInt(document.getElementById('wlSpeed').value);
+      wlState.timer = setTimeout(loop, speed);
+    }
+  }
+  wlState.timer = setTimeout(loop, 300);
+}
+
+// ═══════════════════════════════════════════
 // 初始化
 // ═══════════════════════════════════════════
 populateGraphSelects();
 drawGraph('graphCanvas', graphState);
 drawGraph('shortCanvas', shortState);
 generateMaze();
+populateWordLadderSelects();
+drawWordLadder();
 </script>
 </body>
 </html>
